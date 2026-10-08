@@ -590,10 +590,90 @@ fn resolve_windows_codex_path() -> String {
 
 fn build_agent() -> Result<ureq::Agent, PollError> {
     let tls = native_tls::TlsConnector::new().map_err(|_| PollError::RequestFailed)?;
-    Ok(ureq::AgentBuilder::new()
+    let mut builder = ureq::AgentBuilder::new()
         .timeout(Duration::from_secs(30))
-        .tls_connector(std::sync::Arc::new(tls))
-        .build())
+        .tls_connector(std::sync::Arc::new(tls));
+    // Apps launched from Explorer may have only Windows proxy settings configured.
+    // Preserve ureq's existing environment-variable overrides when present.
+    if ![
+        "ALL_PROXY", "all_proxy", "HTTPS_PROXY", "https_proxy", "HTTP_PROXY", "http_proxy",
+    ]
+    .iter()
+    .any(|name| std::env::var_os(name).is_some())
+    {
+        if let Some(proxy) = windows_https_proxy().and_then(|value| ureq::Proxy::new(value).ok()) {
+            diagnose::log("using Windows system proxy for usage requests");
+            builder = builder.proxy(proxy);
+        }
+    }
+    Ok(builder.build())
+}
+
+fn windows_https_proxy() -> Option<String> {
+    use windows::core::w;
+    use windows::Win32::System::Registry::{
+        RegGetValueW, HKEY_CURRENT_USER, RRF_RT_REG_DWORD, RRF_RT_REG_SZ,
+    };
+
+    let key = w!("Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings");
+    unsafe {
+        let mut enabled = 0u32;
+        let mut size = std::mem::size_of::<u32>() as u32;
+        RegGetValueW(
+            HKEY_CURRENT_USER,
+            key,
+            w!("ProxyEnable"),
+            RRF_RT_REG_DWORD,
+            None,
+            Some((&mut enabled as *mut u32).cast()),
+            Some(&mut size),
+        )
+        .ok()
+        .ok()?;
+        if enabled == 0 {
+            return None;
+        }
+        size = 0;
+        RegGetValueW(
+            HKEY_CURRENT_USER,
+            key,
+            w!("ProxyServer"),
+            RRF_RT_REG_SZ,
+            None,
+            None,
+            Some(&mut size),
+        )
+        .ok()
+        .ok()?;
+        let mut buffer = vec![0u16; size as usize / 2];
+        RegGetValueW(
+            HKEY_CURRENT_USER,
+            key,
+            w!("ProxyServer"),
+            RRF_RT_REG_SZ,
+            None,
+            Some(buffer.as_mut_ptr().cast()),
+            Some(&mut size),
+        )
+        .ok()
+        .ok()?;
+        let value = String::from_utf16_lossy(&buffer);
+        https_proxy_from_windows_setting(value.trim_end_matches('\0')).map(str::to_owned)
+    }
+}
+
+fn https_proxy_from_windows_setting(value: &str) -> Option<&str> {
+    let value = value.trim();
+    if value.contains('=') {
+        value.split(';').find_map(|entry| {
+            let (protocol, address) = entry.split_once('=')?;
+            let address = address.trim();
+            (protocol.trim().eq_ignore_ascii_case("https") && !address.is_empty())
+                .then_some(address)
+        })
+    } else {
+        (!value.is_empty()).then_some(value)
+    }
 }
 
 fn classify_http_status(status: u16) -> PollError {
@@ -1736,6 +1816,24 @@ pub fn app_is_past_reset(data: &AppUsageData) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn windows_proxy_selects_shared_or_https_address() {
+        assert_eq!(
+            https_proxy_from_windows_setting("127.0.0.1:7890"),
+            Some("127.0.0.1:7890")
+        );
+        assert_eq!(
+            https_proxy_from_windows_setting("http=127.0.0.1:8080; https=127.0.0.1:7890"),
+            Some("127.0.0.1:7890")
+        );
+        assert_eq!(https_proxy_from_windows_setting("http=127.0.0.1:8080"), None);
+        assert_eq!(
+            https_proxy_from_windows_setting("https= ; socks=127.0.0.1:1080"),
+            None
+        );
+        assert_eq!(https_proxy_from_windows_setting("  "), None);
+    }
 
     #[test]
     fn claude_credentials_path_honors_custom_config_directory() {
