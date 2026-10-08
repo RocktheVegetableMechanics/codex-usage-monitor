@@ -1693,15 +1693,32 @@ fn is_leap(y: u64) -> bool {
 pub fn format_line(
     section: &UsageSection,
     strings: Strings,
-    show_remaining_in_chinese: bool,
+    chinese: bool,
+    show_reset_time: bool,
     window: UsageWindowKind,
 ) -> String {
-    if show_remaining_in_chinese {
+    if chinese && show_reset_time {
         return format_simplified_chinese_line(section, window);
     }
 
-    let pct = format!("{:.0}%", section.percentage);
-    let cd = format_countdown(section.resets_at, strings);
+    let remaining = remaining_percentage(section.percentage);
+    let pct = if chinese {
+        format!("剩余{remaining:.0}%")
+    } else {
+        format!("{remaining:.0}%")
+    };
+    let cd = if show_reset_time {
+        section
+            .resets_at
+            .and_then(native_interop::system_time_to_local)
+            .map(|reset| match window {
+                UsageWindowKind::Session => format!("{:02}:{:02}", reset.wHour, reset.wMinute),
+                UsageWindowKind::Weekly => format!("{:02}/{:02}", reset.wMonth, reset.wDay),
+            })
+            .unwrap_or_default()
+    } else {
+        format_countdown(section.resets_at, strings)
+    };
     if cd.is_empty() {
         pct
     } else {
@@ -1816,6 +1833,39 @@ pub fn app_is_past_reset(data: &AppUsageData) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::localization::LanguageId;
+
+    #[test]
+    fn balance_text_decreases_as_usage_increases_in_both_languages_and_time_modes() {
+        for (used, remaining) in [(0.0, 100), (25.0, 75), (100.0, 0)] {
+            let section = UsageSection {
+                percentage: used,
+                resets_at: None,
+            };
+            for reset_time in [false, true] {
+                assert_eq!(
+                    format_line(&section, LanguageId::SimplifiedChinese.strings(), true, reset_time, UsageWindowKind::Weekly),
+                    format!("剩余{remaining}%")
+                );
+                assert_eq!(
+                    format_line(&section, LanguageId::English.strings(), false, reset_time, UsageWindowKind::Weekly),
+                    format!("{remaining}%")
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn chinese_countdown_keeps_remaining_balance_and_localized_time_units() {
+        let section = UsageSection {
+            percentage: 25.0,
+            resets_at: Some(SystemTime::now() + Duration::from_secs(3 * 86400 + 3600)),
+        };
+        assert_eq!(
+            format_line(&section, LanguageId::SimplifiedChinese.strings(), true, false, UsageWindowKind::Weekly),
+            "剩余75% · 3天"
+        );
+    }
 
     #[test]
     fn windows_proxy_selects_shared_or_https_address() {
@@ -1939,7 +1989,7 @@ mod tests {
             resets_at: None,
         };
         assert_eq!(
-            format_line(&section, strings, true, UsageWindowKind::Session),
+            format_line(&section, strings, true, true, UsageWindowKind::Session),
             "剩余70%"
         );
         let session_reset = windows::Win32::Foundation::SYSTEMTIME {

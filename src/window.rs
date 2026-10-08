@@ -54,6 +54,8 @@ struct AppState {
     embedded: bool,
     language_override: Option<LanguageId>,
     language: LanguageId,
+    display_mode: DisplayMode,
+    accent_color: AccentColor,
     install_channel: InstallChannel,
 
     session_percent: f64,
@@ -144,6 +146,99 @@ const IDM_ALERT_OFF: u16 = 80;
 const IDM_ALERT_10: u16 = 81;
 const IDM_ALERT_20: u16 = 82;
 const IDM_ALERT_30: u16 = 83;
+const IDM_DISPLAY_SEGMENTED_COUNTDOWN: u16 = 90;
+const IDM_DISPLAY_CONTINUOUS_COUNTDOWN: u16 = 91;
+const IDM_DISPLAY_SEGMENTED_RESET: u16 = 92;
+const IDM_DISPLAY_CONTINUOUS_RESET: u16 = 93;
+const IDM_COLOR_THEME: u16 = 100;
+const IDM_COLOR_ORANGE: u16 = 101;
+const IDM_COLOR_BLUE: u16 = 102;
+const IDM_COLOR_GREEN: u16 = 103;
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+enum AccentColor {
+    #[default]
+    Theme,
+    Orange,
+    Blue,
+    Green,
+}
+
+impl AccentColor {
+    const ALL: [Self; 4] = [Self::Theme, Self::Orange, Self::Blue, Self::Green];
+
+    fn menu_id(self) -> u16 {
+        match self {
+            Self::Theme => IDM_COLOR_THEME,
+            Self::Orange => IDM_COLOR_ORANGE,
+            Self::Blue => IDM_COLOR_BLUE,
+            Self::Green => IDM_COLOR_GREEN,
+        }
+    }
+
+    fn label(self, chinese: bool) -> &'static str {
+        match (self, chinese) {
+            (Self::Theme, true) => "默认",
+            (Self::Orange, true) => "橙色",
+            (Self::Blue, true) => "蓝色",
+            (Self::Green, true) => "绿色",
+            (Self::Theme, false) => "Default",
+            (Self::Orange, false) => "Orange",
+            (Self::Blue, false) => "Blue",
+            (Self::Green, false) => "Green",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+enum DisplayMode {
+    #[default]
+    SegmentedCountdown,
+    ContinuousCountdown,
+    SegmentedResetTime,
+    ContinuousResetTime,
+}
+
+impl DisplayMode {
+    const ALL: [Self; 4] = [
+        Self::SegmentedCountdown,
+        Self::ContinuousCountdown,
+        Self::SegmentedResetTime,
+        Self::ContinuousResetTime,
+    ];
+
+    fn segmented(self) -> bool {
+        matches!(self, Self::SegmentedCountdown | Self::SegmentedResetTime)
+    }
+
+    fn reset_time(self) -> bool {
+        matches!(self, Self::SegmentedResetTime | Self::ContinuousResetTime)
+    }
+
+    fn menu_id(self) -> u16 {
+        match self {
+            Self::SegmentedCountdown => IDM_DISPLAY_SEGMENTED_COUNTDOWN,
+            Self::ContinuousCountdown => IDM_DISPLAY_CONTINUOUS_COUNTDOWN,
+            Self::SegmentedResetTime => IDM_DISPLAY_SEGMENTED_RESET,
+            Self::ContinuousResetTime => IDM_DISPLAY_CONTINUOUS_RESET,
+        }
+    }
+
+    fn label(self, chinese: bool) -> &'static str {
+        match (self, chinese) {
+            (Self::SegmentedCountdown, true) => "分段条 · 倒计时",
+            (Self::ContinuousCountdown, true) => "连续条 · 倒计时",
+            (Self::SegmentedResetTime, true) => "分段条 · 重置时间",
+            (Self::ContinuousResetTime, true) => "连续条 · 重置时间",
+            (Self::SegmentedCountdown, false) => "Segmented bar · Countdown",
+            (Self::ContinuousCountdown, false) => "Continuous bar · Countdown",
+            (Self::SegmentedResetTime, false) => "Segmented bar · Reset time",
+            (Self::ContinuousResetTime, false) => "Continuous bar · Reset time",
+        }
+    }
+}
 
 const WM_DPICHANGED_MSG: u32 = 0x02E0;
 const WM_APP_UPDATE_CHECK_COMPLETE: u32 = WM_APP + 2;
@@ -328,6 +423,10 @@ struct SettingsFile {
     poll_interval_ms: u32,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     language: Option<String>,
+    #[serde(default)]
+    display_mode: DisplayMode,
+    #[serde(default)]
+    accent_color: AccentColor,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     last_update_check_unix: Option<u64>,
     #[serde(default = "default_widget_visible")]
@@ -355,6 +454,8 @@ impl Default for SettingsFile {
             taskbar_index: 0,
             poll_interval_ms: default_poll_interval(),
             language: None,
+            display_mode: DisplayMode::default(),
+            accent_color: AccentColor::default(),
             last_update_check_unix: None,
             widget_visible: true,
             show_claude_code: false,
@@ -481,6 +582,8 @@ fn save_state_settings() {
             language: s
                 .language_override
                 .map(|language| language.code().to_string()),
+            display_mode: s.display_mode,
+            accent_color: s.accent_color,
             last_update_check_unix: s.last_update_check_unix,
             widget_visible: s.widget_visible,
             show_claude_code: s.show_claude_code,
@@ -918,7 +1021,8 @@ fn refresh_usage_texts(state: &mut AppState) {
     }
 
     let strings = state.language.strings();
-    let show_remaining = state.language == LanguageId::SimplifiedChinese;
+    let chinese = state.language == LanguageId::SimplifiedChinese;
+    let show_reset_time = state.display_mode.reset_time();
     let Some(data) = state.data.as_ref() else {
         return;
     };
@@ -927,13 +1031,15 @@ fn refresh_usage_texts(state: &mut AppState) {
         state.session_text = poller::format_line(
             &claude_code.session,
             strings,
-            show_remaining,
+            chinese,
+            show_reset_time,
             poller::UsageWindowKind::Session,
         );
         state.weekly_text = poller::format_line(
             &claude_code.weekly,
             strings,
-            show_remaining,
+            chinese,
+            show_reset_time,
             poller::UsageWindowKind::Weekly,
         );
     } else if state.show_claude_code {
@@ -945,13 +1051,15 @@ fn refresh_usage_texts(state: &mut AppState) {
         state.codex_session_text = poller::format_line(
             &codex.session,
             strings,
-            show_remaining,
+            chinese,
+            show_reset_time,
             poller::UsageWindowKind::Session,
         );
         state.codex_weekly_text = poller::format_line(
             &codex.weekly,
             strings,
-            show_remaining,
+            chinese,
+            show_reset_time,
             poller::UsageWindowKind::Weekly,
         );
     } else if state.show_codex {
@@ -963,7 +1071,8 @@ fn refresh_usage_texts(state: &mut AppState) {
         state.antigravity_session_text = poller::format_line(
             &antigravity.session,
             strings,
-            show_remaining,
+            chinese,
+            show_reset_time,
             poller::UsageWindowKind::Session,
         );
         state.antigravity_weekly_text =
@@ -973,7 +1082,8 @@ fn refresh_usage_texts(state: &mut AppState) {
                 poller::format_line(
                     &antigravity.weekly,
                     strings,
-                    show_remaining,
+                    chinese,
+                    show_reset_time,
                     poller::UsageWindowKind::Weekly,
                 )
             };
@@ -1410,6 +1520,7 @@ const SEGMENT_W: i32 = 10;
 const SEGMENT_H: i32 = 13;
 const SEGMENT_GAP: i32 = 1;
 const SEGMENT_COUNT: i32 = 10;
+const CORNER_RADIUS: i32 = 2;
 
 const LEFT_DIVIDER_W: i32 = 3;
 const DIVIDER_RIGHT_MARGIN: i32 = 10;
@@ -1454,28 +1565,31 @@ fn row_bar_segment_count(active_models: i32) -> i32 {
     }
 }
 
-fn usage_layout_widths(language: LanguageId) -> (i32, i32) {
+fn usage_layout_widths(language: LanguageId, display_mode: DisplayMode) -> (i32, i32) {
     if language == LanguageId::SimplifiedChinese {
         (
             SIMPLIFIED_CHINESE_LABEL_WIDTH,
             SIMPLIFIED_CHINESE_TEXT_WIDTH,
         )
     } else {
-        (LABEL_WIDTH, TEXT_WIDTH)
+        (
+            LABEL_WIDTH,
+            if display_mode.reset_time() { 104 } else { TEXT_WIDTH },
+        )
     }
 }
 
-fn usage_percent_for_display(language: LanguageId, used_percentage: f64) -> f64 {
-    if language == LanguageId::SimplifiedChinese {
-        poller::remaining_percentage(used_percentage)
-    } else {
-        used_percentage.clamp(0.0, 100.0)
-    }
+fn usage_percent_for_display(used_percentage: f64) -> f64 {
+    poller::remaining_percentage(used_percentage)
 }
 
-fn total_widget_width_for(active_models: i32, language: LanguageId) -> i32 {
+fn total_widget_width_for(
+    active_models: i32,
+    language: LanguageId,
+    display_mode: DisplayMode,
+) -> i32 {
     let bar_segments = row_bar_segment_count(active_models);
-    let (label_width, text_width) = usage_layout_widths(language);
+    let (label_width, text_width) = usage_layout_widths(language, display_mode);
     let model_width = (sc(SEGMENT_W) + sc(SEGMENT_GAP)) * bar_segments - sc(SEGMENT_GAP)
         + sc(BAR_RIGHT_MARGIN)
         + sc(text_width);
@@ -1497,11 +1611,12 @@ fn total_widget_width_for_state(state: &AppState) -> i32 {
             state.show_antigravity,
         ),
         state.language,
+        state.display_mode,
     )
 }
 
 fn total_widget_width() -> i32 {
-    let (active_models, language) = {
+    let (active_models, language, display_mode) = {
         let state = lock_state();
         state
             .as_ref()
@@ -1509,22 +1624,25 @@ fn total_widget_width() -> i32 {
                 (
                     active_model_count(s.show_claude_code, s.show_codex, s.show_antigravity),
                     s.language,
+                    s.display_mode,
                 )
             })
-            .unwrap_or((1, LanguageId::English))
+            .unwrap_or((1, LanguageId::English, DisplayMode::default()))
     };
-    total_widget_width_for(active_models, language)
+    total_widget_width_for(active_models, language, display_mode)
 }
 
 fn claude_accent_color() -> Color {
     Color::from_hex("#D97757")
 }
 
-fn codex_accent_color(is_dark: bool) -> Color {
-    if is_dark {
-        Color::from_hex("#F5F5F5")
-    } else {
-        Color::from_hex("#1F1F1F")
+fn codex_accent_color(is_dark: bool, color: AccentColor) -> Color {
+    match color {
+        AccentColor::Orange => claude_accent_color(),
+        AccentColor::Blue => antigravity_accent_color(),
+        AccentColor::Green => Color::from_hex("#34A853"),
+        AccentColor::Theme if is_dark => Color::from_hex("#F5F5F5"),
+        AccentColor::Theme => Color::from_hex("#1F1F1F"),
     }
 }
 
@@ -1540,11 +1658,13 @@ fn claude_usage_text_color(is_dark: bool) -> Color {
     }
 }
 
-fn codex_usage_text_color(is_dark: bool) -> Color {
-    if is_dark {
-        Color::from_hex("#F5F5F5")
-    } else {
-        Color::from_hex("#1F1F1F")
+fn codex_usage_text_color(is_dark: bool, color: AccentColor) -> Color {
+    match color {
+        AccentColor::Orange => claude_usage_text_color(is_dark),
+        AccentColor::Blue => antigravity_usage_text_color(is_dark),
+        AccentColor::Green if is_dark => Color::from_hex("#81C995"),
+        AccentColor::Green => Color::from_hex("#188038"),
+        AccentColor::Theme => codex_accent_color(is_dark, color),
     }
 }
 
@@ -1646,7 +1766,7 @@ pub fn run() {
             WS_POPUP,
             0,
             0,
-            total_widget_width_for(initial_model_count, language),
+            total_widget_width_for(initial_model_count, language, settings.display_mode),
             sc(WIDGET_HEIGHT),
             HWND::default(),
             HMENU::default(),
@@ -1688,6 +1808,8 @@ pub fn run() {
                 embedded: false,
                 language_override,
                 language,
+                display_mode: settings.display_mode,
+                accent_color: settings.accent_color,
                 install_channel,
                 session_percent: 0.0,
                 session_text: "--".to_string(),
@@ -1819,6 +1941,8 @@ fn render_layered() {
         is_dark,
         embedded,
         language,
+        display_mode,
+        accent_color,
         strings,
         session_pct,
         session_text,
@@ -1845,6 +1969,8 @@ fn render_layered() {
                 s.is_dark,
                 s.embedded,
                 s.language,
+                s.display_mode,
+                s.accent_color,
                 s.language.strings(),
                 s.session_percent,
                 s.session_text.clone(),
@@ -1882,7 +2008,7 @@ fn render_layered() {
     let height = sc(WIDGET_HEIGHT);
 
     let accent = claude_accent_color();
-    let codex_accent = codex_accent_color(is_dark);
+    let codex_accent = codex_accent_color(is_dark, accent_color);
     let antigravity_accent = antigravity_accent_color();
     let track = if is_dark {
         Color::from_hex("#444444")
@@ -1943,6 +2069,8 @@ fn render_layered() {
             &accent,
             &track,
             language,
+            display_mode,
+            accent_color,
             strings,
             session_pct,
             &session_text,
@@ -2022,6 +2150,8 @@ fn paint_content(
     accent: &Color,
     track: &Color,
     language: LanguageId,
+    display_mode: DisplayMode,
+    accent_color: AccentColor,
     strings: Strings,
     session_pct: f64,
     session_text: &str,
@@ -2044,13 +2174,13 @@ fn paint_content(
     antigravity_accent: &Color,
 ) {
     unsafe {
-        let session_pct = usage_percent_for_display(language, session_pct);
-        let weekly_pct = usage_percent_for_display(language, weekly_pct);
-        let codex_session_pct = usage_percent_for_display(language, codex_session_pct);
-        let codex_weekly_pct = usage_percent_for_display(language, codex_weekly_pct);
-        let antigravity_session_pct = usage_percent_for_display(language, antigravity_session_pct);
-        let antigravity_weekly_pct = usage_percent_for_display(language, antigravity_weekly_pct);
-        let (label_width, text_width) = usage_layout_widths(language);
+        let session_pct = usage_percent_for_display(session_pct);
+        let weekly_pct = usage_percent_for_display(weekly_pct);
+        let codex_session_pct = usage_percent_for_display(codex_session_pct);
+        let codex_weekly_pct = usage_percent_for_display(codex_weekly_pct);
+        let antigravity_session_pct = usage_percent_for_display(antigravity_session_pct);
+        let antigravity_weekly_pct = usage_percent_for_display(antigravity_weekly_pct);
+        let (label_width, text_width) = usage_layout_widths(language, display_mode);
 
         let client_rect = RECT {
             left: 0,
@@ -2154,6 +2284,8 @@ fn paint_content(
                 track,
                 label_width,
                 text_width,
+                display_mode.segmented(),
+                accent_color,
             );
         }
         if show_weekly_window {
@@ -2183,6 +2315,8 @@ fn paint_content(
                 track,
                 label_width,
                 text_width,
+                display_mode.segmented(),
+                accent_color,
             );
         }
 
@@ -3112,6 +3246,38 @@ unsafe extern "system" fn wnd_proc(
                     render_layered();
                     sync_tray_icons(hwnd);
                 }
+                IDM_DISPLAY_SEGMENTED_COUNTDOWN
+                | IDM_DISPLAY_CONTINUOUS_COUNTDOWN
+                | IDM_DISPLAY_SEGMENTED_RESET
+                | IDM_DISPLAY_CONTINUOUS_RESET => {
+                    {
+                        let mut state = lock_state();
+                        if let Some(s) = state.as_mut() {
+                            s.display_mode = DisplayMode::ALL
+                                .into_iter()
+                                .find(|mode| mode.menu_id() == id)
+                                .unwrap_or_default();
+                            refresh_usage_texts(s);
+                        }
+                    }
+                    save_state_settings();
+                    position_at_taskbar();
+                    render_layered();
+                    sync_tray_icons(hwnd);
+                }
+                IDM_COLOR_THEME | IDM_COLOR_ORANGE | IDM_COLOR_BLUE | IDM_COLOR_GREEN => {
+                    {
+                        let mut state = lock_state();
+                        if let Some(s) = state.as_mut() {
+                            s.accent_color = AccentColor::ALL
+                                .into_iter()
+                                .find(|color| color.menu_id() == id)
+                                .unwrap_or_default();
+                        }
+                    }
+                    save_state_settings();
+                    render_layered();
+                }
                 IDM_ALERT_OFF | IDM_ALERT_10 | IDM_ALERT_20 | IDM_ALERT_30 => {
                     let threshold = match id {
                         IDM_ALERT_10 => 10,
@@ -3271,6 +3437,8 @@ fn show_context_menu(hwnd: HWND) {
             show_session_window,
             show_weekly_window,
             alert_threshold_percent,
+            display_mode,
+            accent_color,
         ) = {
             let state = lock_state();
             match state.as_ref() {
@@ -3289,6 +3457,8 @@ fn show_context_menu(hwnd: HWND) {
                     s.show_session_window,
                     s.show_weekly_window,
                     s.alert_threshold_percent,
+                    s.display_mode,
+                    s.accent_color,
                 ),
                 None => (
                     POLL_15_MIN,
@@ -3305,6 +3475,8 @@ fn show_context_menu(hwnd: HWND) {
                     true,
                     true,
                     0,
+                    DisplayMode::default(),
+                    AccentColor::default(),
                 ),
             }
         };
@@ -3402,6 +3574,57 @@ fn show_context_menu(hwnd: HWND) {
             PCWSTR::from_raw(models_label.as_ptr()),
         );
 
+        // Display style is independent of the interface language.
+        let display_menu = CreatePopupMenu().unwrap();
+        for mode in DisplayMode::ALL {
+            let label = native_interop::wide_str(
+                mode.label(language == LanguageId::SimplifiedChinese),
+            );
+            let flags = if display_mode == mode { MF_CHECKED } else { MENU_ITEM_FLAGS(0) };
+            let _ = AppendMenuW(
+                display_menu,
+                flags,
+                mode.menu_id() as usize,
+                PCWSTR::from_raw(label.as_ptr()),
+            );
+        }
+        let display_label = native_interop::wide_str(if language == LanguageId::SimplifiedChinese {
+            "显示模式"
+        } else {
+            "Display mode"
+        });
+        let _ = AppendMenuW(
+            menu,
+            MF_POPUP,
+            display_menu.0 as usize,
+            PCWSTR::from_raw(display_label.as_ptr()),
+        );
+
+        let color_menu = CreatePopupMenu().unwrap();
+        for color in AccentColor::ALL {
+            let label = native_interop::wide_str(
+                color.label(language == LanguageId::SimplifiedChinese),
+            );
+            let flags = if accent_color == color { MF_CHECKED } else { MENU_ITEM_FLAGS(0) };
+            let _ = AppendMenuW(
+                color_menu,
+                flags,
+                color.menu_id() as usize,
+                PCWSTR::from_raw(label.as_ptr()),
+            );
+        }
+        let color_label = native_interop::wide_str(if language == LanguageId::SimplifiedChinese {
+            "颜色"
+        } else {
+            "Color"
+        });
+        let _ = AppendMenuW(
+            menu,
+            MF_POPUP,
+            color_menu.0 as usize,
+            PCWSTR::from_raw(color_label.as_ptr()),
+        );
+
         // Usage window visibility submenu. Keep at least one window enabled.
         let usage_menu = CreatePopupMenu().unwrap();
         let session_label =
@@ -3438,7 +3661,7 @@ fn show_context_menu(hwnd: HWND) {
             PCWSTR::from_raw(weekly_label.as_ptr()),
         );
         let usage_label = native_interop::wide_str(if language == LanguageId::SimplifiedChinese {
-            "显示用量"
+            "显示额度"
         } else {
             "Usage display"
         });
@@ -3653,6 +3876,8 @@ fn paint(hdc: HDC, hwnd: HWND) {
     let (
         is_dark,
         language,
+        display_mode,
+        accent_color,
         strings,
         session_pct,
         session_text,
@@ -3677,6 +3902,8 @@ fn paint(hdc: HDC, hwnd: HWND) {
             Some(s) => (
                 s.is_dark,
                 s.language,
+                s.display_mode,
+                s.accent_color,
                 s.language.strings(),
                 s.session_percent,
                 s.session_text.clone(),
@@ -3701,7 +3928,7 @@ fn paint(hdc: HDC, hwnd: HWND) {
     };
 
     let accent = claude_accent_color();
-    let codex_accent = codex_accent_color(is_dark);
+    let codex_accent = codex_accent_color(is_dark, accent_color);
     let antigravity_accent = antigravity_accent_color();
     let track = if is_dark {
         Color::from_hex("#444444")
@@ -3743,6 +3970,8 @@ fn paint(hdc: HDC, hwnd: HWND) {
             &accent,
             &track,
             language,
+            display_mode,
+            accent_color,
             strings,
             session_pct,
             &session_text,
@@ -3795,6 +4024,8 @@ fn draw_row(
     track: &Color,
     label_width: i32,
     text_width: i32,
+    segmented: bool,
+    accent_color: AccentColor,
 ) {
     let seg_h = sc(SEGMENT_H);
     let active_models = active_model_count(show_claude_code, show_codex, show_antigravity);
@@ -3805,8 +4036,8 @@ fn draw_row(
     } else {
         *text_color
     };
-    let codex_value_color = if use_model_text_colors {
-        codex_usage_text_color(is_dark)
+    let codex_value_color = if use_model_text_colors || accent_color != AccentColor::Theme {
+        codex_usage_text_color(is_dark, accent_color)
     } else {
         *text_color
     };
@@ -3845,6 +4076,7 @@ fn draw_row(
                 track,
                 &claude_value_color,
                 text_width,
+                segmented,
             );
             model_x += model_usage_width(segment_count, text_width) + sc(MODEL_RIGHT_MARGIN);
         }
@@ -3860,6 +4092,7 @@ fn draw_row(
                 track,
                 &codex_value_color,
                 text_width,
+                segmented,
             );
             model_x += model_usage_width(segment_count, text_width) + sc(MODEL_RIGHT_MARGIN);
         }
@@ -3875,6 +4108,7 @@ fn draw_row(
                 track,
                 &antigravity_value_color,
                 text_width,
+                segmented,
             );
         }
     }
@@ -3897,48 +4131,94 @@ fn draw_usage_bar(
     track: &Color,
     text_color: &Color,
     text_width: i32,
+    segmented: bool,
 ) {
     let seg_w = sc(SEGMENT_W);
     let seg_h = sc(SEGMENT_H);
     let seg_gap = sc(SEGMENT_GAP);
-    let bar_width = segment_count * (seg_w + seg_gap) - seg_gap;
-    let corner_r = seg_h / 2;
+    let corner_r = sc(CORNER_RADIUS);
 
     unsafe {
         let percent_clamped = percent.clamp(0.0, 100.0);
-        let bar_rect = RECT {
-            left: bar_x,
-            top: y,
-            right: bar_x + bar_width,
-            bottom: y + seg_h,
-        };
-        draw_rounded_rect(hdc, &bar_rect, track, corner_r);
+        let segment_percent = 100.0 / segment_count as f64;
 
-        let fill_width = (bar_width as f64 * percent_clamped / 100.0).round() as i32;
-        if fill_width > 0 {
-            let fill_rect = RECT {
+        if segmented {
+            for i in 0..segment_count {
+                let seg_x = bar_x + i * (seg_w + seg_gap);
+                let seg_start = (i as f64) * segment_percent;
+                let seg_end = seg_start + segment_percent;
+
+                let seg_rect = RECT {
+                    left: seg_x,
+                    top: y,
+                    right: seg_x + seg_w,
+                    bottom: y + seg_h,
+                };
+
+                if percent_clamped >= seg_end {
+                    draw_rounded_rect(hdc, &seg_rect, accent, corner_r);
+                } else if percent_clamped <= seg_start {
+                    draw_rounded_rect(hdc, &seg_rect, track, corner_r);
+                } else {
+                    draw_rounded_rect(hdc, &seg_rect, track, corner_r);
+                    let fraction = (percent_clamped - seg_start) / segment_percent;
+                    let fill_width = (seg_w as f64 * fraction) as i32;
+                    if fill_width > 0 {
+                        let fill_rect = RECT {
+                            left: seg_x,
+                            top: y,
+                            right: seg_x + fill_width,
+                            bottom: y + seg_h,
+                        };
+                        let rgn = CreateRoundRectRgn(
+                            seg_rect.left,
+                            seg_rect.top,
+                            seg_rect.right + 1,
+                            seg_rect.bottom + 1,
+                            corner_r * 2,
+                            corner_r * 2,
+                        );
+                        let _ = SelectClipRgn(hdc, rgn);
+                        let brush = CreateSolidBrush(COLORREF(accent.to_colorref()));
+                        FillRect(hdc, &fill_rect, brush);
+                        let _ = DeleteObject(brush);
+                        let _ = SelectClipRgn(hdc, HRGN::default());
+                        let _ = DeleteObject(rgn);
+                    }
+                }
+            }
+        } else {
+            let bar_rect = RECT {
                 left: bar_x,
                 top: y,
-                right: bar_x + fill_width,
+                right: bar_x + segment_count * (seg_w + seg_gap) - seg_gap,
                 bottom: y + seg_h,
             };
-            let rgn = CreateRoundRectRgn(
-                bar_rect.left,
-                bar_rect.top,
-                bar_rect.right + 1,
-                bar_rect.bottom + 1,
-                corner_r * 2,
-                corner_r * 2,
-            );
-            let _ = SelectClipRgn(hdc, rgn);
-            let brush = CreateSolidBrush(COLORREF(accent.to_colorref()));
-            FillRect(hdc, &fill_rect, brush);
-            let _ = DeleteObject(brush);
-            let _ = SelectClipRgn(hdc, HRGN::default());
-            let _ = DeleteObject(rgn);
+            draw_rounded_rect(hdc, &bar_rect, track, seg_h / 2);
+            let fill_width = ((bar_rect.right - bar_x) as f64 * percent_clamped / 100.0).round() as i32;
+            if fill_width > 0 {
+                let fill_rect = RECT {
+                    right: bar_x + fill_width,
+                    ..bar_rect
+                };
+                let rgn = CreateRoundRectRgn(
+                    bar_rect.left,
+                    bar_rect.top,
+                    bar_rect.right + 1,
+                    bar_rect.bottom + 1,
+                    seg_h,
+                    seg_h,
+                );
+                let _ = SelectClipRgn(hdc, rgn);
+                let brush = CreateSolidBrush(COLORREF(accent.to_colorref()));
+                FillRect(hdc, &fill_rect, brush);
+                let _ = DeleteObject(brush);
+                let _ = SelectClipRgn(hdc, HRGN::default());
+                let _ = DeleteObject(rgn);
+            }
         }
 
-        let text_x = bar_x + bar_width + sc(BAR_RIGHT_MARGIN);
+        let text_x = bar_x + segment_count * (seg_w + seg_gap) - seg_gap + sc(BAR_RIGHT_MARGIN);
         let mut text_wide: Vec<u16> = text.encode_utf16().collect();
         let mut text_rect = RECT {
             left: text_x,
@@ -3976,6 +4256,34 @@ fn draw_rounded_rect(hdc: HDC, rect: &RECT, color: &Color, radius: i32) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn display_mode_survives_settings_reload_without_changing_language_or_visible_rows() {
+        let mut settings: SettingsFile = serde_json::from_str(&test_settings_json("zh-CN")).unwrap();
+        assert_eq!(settings.display_mode, DisplayMode::SegmentedCountdown);
+        assert_eq!(settings.accent_color, AccentColor::Theme);
+        for mode in DisplayMode::ALL {
+            settings.display_mode = mode;
+            settings.show_session_window = false;
+            for color in AccentColor::ALL {
+                settings.accent_color = color;
+                let saved = serde_json::to_string(&settings).unwrap();
+                let restored: SettingsFile = serde_json::from_str(&saved).unwrap();
+                assert_eq!(restored.display_mode, mode);
+                assert_eq!(restored.accent_color, color);
+                assert_eq!(restored.language.as_deref(), Some("zh-CN"));
+                assert!(!restored.show_session_window);
+                assert!(restored.show_weekly_window);
+            }
+        }
+    }
+
+    #[test]
+    fn bar_balance_decreases_as_usage_increases() {
+        assert_eq!(usage_percent_for_display(0.0), 100.0);
+        assert_eq!(usage_percent_for_display(25.0), 75.0);
+        assert_eq!(usage_percent_for_display(100.0), 0.0);
+    }
 
     #[test]
     fn service_tooltip_combines_visible_quota_rows() {
