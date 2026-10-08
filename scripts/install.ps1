@@ -73,7 +73,8 @@ try {
     }
     else {
         $ApiUrl = if ($Version) {
-            "https://api.github.com/repos/$Repository/releases/tags/v$($Version.TrimStart('v'))"
+            $ReleaseTag = 'fork-v' + ($Version -replace '^(fork-v|v)', '')
+            "https://api.github.com/repos/$Repository/releases/tags/$ReleaseTag"
         }
         else {
             "https://api.github.com/repos/$Repository/releases/latest"
@@ -138,7 +139,7 @@ try {
 
         New-Item -Path $UninstallKey -Force | Out-Null
         $UninstallCommand = "powershell.exe -NoProfile -ExecutionPolicy Bypass -File `"$InstalledUninstaller`""
-        Set-ItemProperty -Path $UninstallKey -Name DisplayName -Value 'Codex Usage'
+        Set-ItemProperty -Path $UninstallKey -Name DisplayName -Value 'Codex Usage Fork'
         Set-ItemProperty -Path $UninstallKey -Name DisplayVersion -Value $InstalledVersion
         Set-ItemProperty -Path $UninstallKey -Name Publisher -Value 'RocktheVegetableMechanics'
         Set-ItemProperty -Path $UninstallKey -Name DisplayIcon -Value $TargetPath
@@ -161,7 +162,7 @@ try {
             $Shortcut.TargetPath = $TargetPath
             $Shortcut.WorkingDirectory = $InstallDirectory
             $Shortcut.IconLocation = "$TargetPath,0"
-            $Shortcut.Description = 'Codex Usage'
+            $Shortcut.Description = 'Codex Usage Fork'
             $Shortcut.Save()
         }
 
@@ -189,7 +190,7 @@ try {
         Start-Process -FilePath $TargetPath -WorkingDirectory $InstallDirectory -WindowStyle Hidden
     }
 
-    Write-Output "Codex Usage $InstalledVersion installed to $InstallDirectory"
+    Write-Output "Codex Usage Fork $InstalledVersion installed to $InstallDirectory"
     Write-Output "SHA256: $ActualSha256"
 }
 finally {

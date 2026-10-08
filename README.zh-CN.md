@@ -3,13 +3,13 @@
 
 [English](README.md) | **简体中文**
 
-# Codex Usage
+# Codex Usage Fork
 
 Codex Usage 是一个轻量的 Windows 任务栏组件，用于显示 Codex 剩余额度和重置时间。它直接嵌入任务栏，方便随时查看余额。
 
 ![橙色分段条与中文倒计时](.github/taskbar-preview.png)
 
-本项目基于 [upstream-ray/codex-usage-monitor](https://github.com/upstream-ray/codex-usage-monitor)，增加了显示模式和颜色选项，改进了代理支持，并修复了多显示屏缩放和定位问题。
+本项目基于 [upstream-ray/codex-usage-monitor](https://github.com/upstream-ray/codex-usage-monitor) v1.9.1，使用独立版本编号，从 `fork-v0.1.0` 开始。此分支增加了显示模式和颜色选项，改进了代理支持，并修复了多显示屏缩放和定位问题。
 
 ## 功能
 
@@ -30,6 +30,8 @@ Codex Usage 是一个轻量的 Windows 任务栏组件，用于显示 Codex 剩�
 ## 下载安装
 
 从本分支的[最新版本](https://github.com/RocktheVegetableMechanics/codex-usage-monitor/releases/latest)下载 `codex-usage.exe`，放入有写入权限的文件夹后运行。
+
+如果正在使用本分支此前发布的 `v1.10.0`，请手动下载并替换一次程序，以切换到新的版本编号。已有设置会保留，旧发布也会保留为历史记录。
 
 如需安装到固定目录并创建开始菜单快捷方式，请从同一版本下载 `install.ps1`，然后运行：
 
@@ -80,7 +82,7 @@ cargo build --release --locked
 
 ## 卸载
 
-便携版退出程序后删除可执行文件即可。通过脚本安装的版本，可在“Windows 设置 > 应用 > 已安装的应用”中卸载 **Codex Usage**。卸载后会保留设置，便于重新安装。详见[安装说明](docs/installation.md)。
+便携版退出程序后删除可执行文件即可。通过脚本安装的版本，可在“Windows 设置 > 应用 > 已安装的应用”中卸载 **Codex Usage Fork**。卸载后会保留设置，便于重新安装。详见[安装说明](docs/installation.md)。
 
 ## 许可与致谢
 

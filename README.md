@@ -3,13 +3,13 @@
 
 **English** | [简体中文](README.zh-CN.md)
 
-# Codex Usage
+# Codex Usage Fork
 
 A lightweight Windows taskbar widget that shows your remaining Codex quota and when it resets. It stays directly in the taskbar, so you can check your balance at a glance.
 
 ![Codex Usage with an orange segmented bar and a Chinese reset countdown](.github/taskbar-preview.png)
 
-This fork of [upstream-ray/codex-usage-monitor](https://github.com/upstream-ray/codex-usage-monitor) adds display and color options, improves proxy support, and fixes placement on monitors with different scaling settings.
+This fork is based on [upstream-ray/codex-usage-monitor](https://github.com/upstream-ray/codex-usage-monitor) v1.9.1 and uses its own version series, starting at `fork-v0.1.0`. It adds display and color options, improves proxy support, and fixes placement on monitors with different scaling settings.
 
 ## Features
 
@@ -30,6 +30,8 @@ This fork of [upstream-ray/codex-usage-monitor](https://github.com/upstream-ray/
 ## Download and install
 
 Download `codex-usage.exe` from this fork's [latest release](https://github.com/RocktheVegetableMechanics/codex-usage-monitor/releases/latest) and run it from a folder you can write to.
+
+If you use this fork's former `v1.10.0` release, download and replace the executable once to switch to the new version series. Existing settings are preserved. The old release remains available as a historical record.
 
 For a per-user installation with a Start menu shortcut, download `install.ps1` from the same release and run:
 
@@ -80,7 +82,7 @@ The executable is created at `target\release\codex-usage.exe`. Issues and pull r
 
 ## Uninstall
 
-Exit the app and delete the executable if you use the portable version. If you used the installer, uninstall **Codex Usage** from **Windows Settings > Apps > Installed apps**. Settings are kept for a future reinstall. See [Installation](docs/installation.md) for details.
+Exit the app and delete the executable if you use the portable version. If you used the installer, uninstall **Codex Usage Fork** from **Windows Settings > Apps > Installed apps**. Settings are kept for a future reinstall. See [Installation](docs/installation.md) for details.
 
 ## License and credits
 

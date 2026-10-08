@@ -1,15 +1,15 @@
 [package]
 name = "codex-usage"
-version = "1.10.0"
+version = "0.1.0"
 edition = "2021"
 license = "MIT"
-description = "Codex Usage"
+description = "Codex Usage Fork"
 homepage = "https://github.com/RocktheVegetableMechanics/codex-usage-monitor"
 repository = "https://github.com/RocktheVegetableMechanics/codex-usage-monitor"
 
 [package.metadata.winres]
 CompanyName = "RocktheVegetableMechanics"
-ProductName = "Codex Usage"
+ProductName = "Codex Usage Fork"
 FileDescription = "Lightweight Codex usage monitor for Windows"
 OriginalFilename = "codex-usage.exe"
 InternalName = "CodexUsage"

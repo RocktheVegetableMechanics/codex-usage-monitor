@@ -199,10 +199,10 @@ fn fetch_latest_release() -> Result<Option<ReleaseDescriptor>, String> {
         .into_json()
         .map_err(|e| format!("Unable to parse GitHub release data: {e}"))?;
 
-    let latest_version = release.tag_name.trim_start_matches('v').to_string();
-    if !is_version_newer(&latest_version, env!("CARGO_PKG_VERSION")) {
+    if !is_version_newer(&release.tag_name, env!("CARGO_PKG_VERSION")) {
         return Ok(None);
     }
+    let latest_version = release.tag_name.trim_start_matches("fork-v").to_string();
 
     let asset = release
         .assets
@@ -563,6 +563,9 @@ fn normalize_path(path: &Path) -> String {
 }
 
 fn is_version_newer(candidate: &str, current: &str) -> bool {
+    let Some(candidate) = candidate.strip_prefix("fork-v") else {
+        return false;
+    };
     parse_version(candidate) > parse_version(current)
 }
 
@@ -608,6 +611,25 @@ mod tests {
             "codex-usage-updater-{name}-{}-{unique}",
             std::process::id()
         ))
+    }
+
+    #[test]
+    fn compares_only_fork_release_versions() {
+        for (candidate, current, expected) in [
+            ("fork-v0.1.1", "0.1.0", true),
+            ("fork-v0.2.0", "0.1.9", true),
+            ("fork-v0.10.0", "0.9.9", true),
+            ("fork-v0.1.0", "0.1.0", false),
+            ("fork-v0.1.0", "0.2.0", false),
+            ("v1.9.1", "0.1.0", false),
+            ("v1.10.0", "0.1.0", false),
+            ("1.10.0", "0.1.0", false),
+        ] {
+            assert_eq!(
+                is_version_newer(candidate, current), expected,
+                "{candidate} vs {current}"
+            );
+        }
     }
 
     #[test]
