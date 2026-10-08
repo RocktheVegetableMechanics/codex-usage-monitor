@@ -1,9 +1,16 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use windows::core::PCWSTR;
+use windows::core::{PCWSTR, VARIANT};
 use windows::Win32::Foundation::{BOOL, FILETIME, HWND, LPARAM, RECT, SYSTEMTIME};
+use windows::Win32::Graphics::Gdi::{
+    GetMonitorInfoW, MonitorFromWindow, MONITORINFO, MONITORINFOEXW, MONITOR_DEFAULTTONEAREST,
+};
 use windows::Win32::System::Time::{FileTimeToSystemTime, SystemTimeToTzSpecificLocalTime};
-use windows::Win32::UI::Accessibility::{SetWinEventHook, UnhookWinEvent, HWINEVENTHOOK};
+use windows::Win32::System::Com::{CoCreateInstance, CLSCTX_INPROC_SERVER};
+use windows::Win32::UI::Accessibility::{
+    SetWinEventHook, UnhookWinEvent, HWINEVENTHOOK, CUIAutomation, IUIAutomation,
+    UIA_AutomationIdPropertyId, TreeScope_Descendants,
+};
 use windows::Win32::UI::Shell::{SHAppBarMessage, ABM_GETTASKBARPOS, APPBARDATA};
 use windows::Win32::UI::WindowsAndMessaging::*;
 
@@ -51,6 +58,43 @@ pub fn system_time_to_local(value: SystemTime) -> Option<SYSTEMTIME> {
 pub struct TaskbarWindow {
     pub hwnd: HWND,
     pub rect: RECT,
+}
+
+pub fn monitor_info(hwnd: HWND) -> Option<MONITORINFOEXW> {
+    unsafe {
+        let monitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+        let mut info = MONITORINFOEXW::default();
+        info.monitorInfo.cbSize = std::mem::size_of::<MONITORINFOEXW>() as u32;
+        if GetMonitorInfoW(monitor, &mut info as *mut _ as *mut MONITORINFO).as_bool() {
+            Some(info)
+        } else {
+            None
+        }
+    }
+}
+
+pub fn monitor_device(hwnd: HWND) -> Option<String> {
+    let info = monitor_info(hwnd)?;
+    let len = info.szDevice.iter().position(|c| *c == 0).unwrap_or(info.szDevice.len());
+    Some(String::from_utf16_lossy(&info.szDevice[..len]))
+}
+
+pub fn taskbar_tray_left(hwnd: HWND) -> Option<i32> {
+    if let Some(tray) = find_child_window(hwnd, "TrayNotifyWnd") {
+        return get_window_rect_safe(tray).map(|rect| rect.left);
+    }
+    // Windows 11 secondary taskbars host the clock in XAML, without a HWND.
+    // Its automation ID is independent of the user's language.
+    unsafe {
+        let automation: IUIAutomation = CoCreateInstance(&CUIAutomation, None, CLSCTX_INPROC_SERVER).ok()?;
+        let root = automation.ElementFromHandle(hwnd).ok()?;
+        let condition = automation.CreatePropertyCondition(
+            UIA_AutomationIdPropertyId, &VARIANT::from("SystemTrayIcon"),
+        ).ok()?;
+        let clock = root.FindFirst(TreeScope_Descendants, &condition).ok()?;
+        let rect = clock.CurrentBoundingRectangle().ok()?;
+        (rect.right > rect.left && rect.bottom > rect.top).then_some(rect.left)
+    }
 }
 
 pub fn find_taskbars() -> Vec<TaskbarWindow> {
