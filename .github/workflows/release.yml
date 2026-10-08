@@ -21,8 +21,11 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
 
+      - name: Run tests
+        run: cargo test --locked
+
       - name: Build release binary
-        run: cargo build --release
+        run: cargo build --release --locked
 
       - name: Prepare release assets
         shell: pwsh
@@ -31,6 +34,7 @@ jobs:
           Copy-Item target/release/codex-usage.exe dist/codex-usage.exe
           Copy-Item scripts/install.ps1 dist/install.ps1
           Copy-Item scripts/uninstall.ps1 dist/uninstall.ps1
+          Copy-Item LICENSE dist/LICENSE
 
           $hash = (Get-FileHash -Algorithm SHA256 dist/codex-usage.exe).Hash.ToLowerInvariant()
           "$hash  codex-usage.exe" | Set-Content -Encoding ascii dist/codex-usage.exe.sha256
@@ -43,4 +47,5 @@ jobs:
             dist/codex-usage.exe.sha256
             dist/install.ps1
             dist/uninstall.ps1
+            dist/LICENSE
           generate_release_notes: true

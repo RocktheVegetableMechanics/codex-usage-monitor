@@ -1,221 +1,89 @@
 ![Windows](https://img.shields.io/badge/platform-Windows-blue)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 [English](README.md) | **简体中文**
 
 # Codex Usage
 
-<img src=".github/codex-usage-icon.png" alt="Codex Usage 图标" width="96" height="96">
+Codex Usage 是一个轻量的 Windows 任务栏组件，用于显示 Codex 剩余额度和重置时间。它直接嵌入任务栏，方便随时查看余额。
 
-![运行效果](.github/animation.gif)
+![橙色分段条与中文倒计时](.github/taskbar-preview.png)
 
-一款轻量级的 Windows 原生任务栏小组件，用于监控 Codex 用量，并可选择同时显示 Claude Code 和 Google Antigravity 用量。
+本项目基于 [upstream-ray/codex-usage-monitor](https://github.com/upstream-ray/codex-usage-monitor)，增加了显示模式和颜色选项，改进了代理支持，并修复了多显示屏缩放和定位问题。
 
-它常驻任务栏，无需打开 Codex 应用或账户用量页面，就能随时查看 Codex 用量窗口还剩多少。
+## 功能
 
-## 功能亮点
+- 显示 5 小时和每周的剩余额度。随着使用量增加，进度条和百分比从 100% 逐步降至 0%。
+- 提供四种显示模式：分段条或连续条，搭配倒计时或重置时间。
+- Codex 支持默认、橙色、蓝色和绿色四种配色。
+- 可选择组件所在的显示屏任务栏，并记住所选显示屏；支持各显示屏使用不同的缩放比例。
+- 保留简体中文及上游提供的其他语言。
+- 可选监控 Claude Code 和 Google Antigravity，支持低额度提醒，以及单独显示或隐藏各额度行。
+- 查询额度时，若未设置代理环境变量，则使用 Windows 系统代理。
 
-- 显示当前 Codex **5 小时**用量窗口
-- 显示当前**每周**用量窗口
-- 支持简体中文界面，明确显示剩余用量和重置倒计时
-- 可同时显示 Claude Code 用量
-- 可显示 Google 5 小时及每周 Gemini 配额窗口中的 Antigravity 模型用量
-- 实时显示各项限额的重置倒计时
-- 可在剩余配额为 10%、20% 或 30% 时发出提醒；每个重置窗口只提醒一次
-- 可分别控制 5 小时和每周用量行的显示
-- 小巧的原生组件，直接嵌入 Windows 任务栏
-- 使用一个与桌面应用一致的系统托盘图标
-- 左键单击托盘图标可显示或隐藏任务栏组件
-- 右键菜单支持刷新、监控服务、用量行、配额提醒、更新频率、语言、开机启动、组件显示和软件更新等设置
-- 支持多显示器任务栏，可将组件放到指定屏幕的任务栏中
+## 使用要求
 
-## 适用人群
+- Windows 10 或 Windows 11。
+- 已安装并登录 Codex CLI 或 Codex 应用。
+- 如需监控 Claude Code 或 Antigravity，还需安装并登录对应服务。也支持读取 WSL 中的 Claude Code 登录信息。
 
-本应用适合已经在 Windows 上**安装并登录 Codex CLI 或 Codex 应用**的用户。
+## 下载安装
 
-Codex 默认启用，应用会读取 Codex 使用的同一份本地登录凭据。
+从本分支的[最新版本](https://github.com/RocktheVegetableMechanics/codex-usage-monitor/releases/latest)下载 `codex-usage.exe`，放入有写入权限的文件夹后运行。
 
-Antigravity 也是可选功能。若要显示其用量，请安装并登录 Google Antigravity，然后在右键菜单的**监控服务**中启用 **Antigravity**。
-
-如果你希望始终看到自己离用量上限还有多远，而不必反复打开其他页面，这款工具会很合适。
-
-## 系统要求
-
-- Windows 10 或 Windows 11
-- 已安装并完成身份验证的 Codex CLI 或 Codex 应用
-- 可选：已安装并完成身份验证的 Claude Code
-- 可选：若需查看 Antigravity 用量，需安装并登录 Google Antigravity
-
-通过 WSL 使用 Claude Code 也受支持。监控器可以从 Windows 或 WSL 环境读取 Claude Code 凭据。
-
-## 安装
-
-如需按用户安装，请从[最新版本](https://github.com/upstream-ray/codex-usage-monitor/releases/latest)下载 `install.ps1`，然后运行：
+如需安装到固定目录并创建开始菜单快捷方式，请从同一版本下载 `install.ps1`，然后运行：
 
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\install.ps1
 ```
 
-安装程序会校验发布文件的 SHA256，并在无需管理员权限的情况下安装到 `%LOCALAPPDATA%\Programs\CodexUsage`。它还会创建开始菜单快捷方式，并在 Windows“已安装的应用”中添加卸载项。
-
-如需便携使用，可从同一版本页面下载 `codex-usage.exe`，放在任意具有写入权限的目录中运行。你也可以在本地构建：
-
-```powershell
-cargo build --release
-```
-
-本地构建的可执行文件位于 `target\release\codex-usage.exe`。
-
-## 卸载
-
-可在 Windows“设置”>“应用”>“已安装的应用”中卸载 **Codex Usage**，或运行：
-
-```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$env:LOCALAPPDATA\Programs\CodexUsage\uninstall.ps1"
-```
-
-卸载时会保留 `%APPDATA%\CodexUsage\settings.json`。如需同时删除设置，请显式添加 `-RemoveSettings`。有关升级、便携版、开机启动和 WinGet 的说明，请参阅[安装机制](docs/installation.md)。
+安装脚本会校验下载文件，并将程序安装到 `%LOCALAPPDATA%\Programs\CodexUsage`，无需管理员权限。本分支通过 GitHub Releases 发布；WinGet 中的 `Ray.CodexUsage` 属于上游项目。
 
 ## 使用方法
 
-运行：
+右键单击任务栏组件或托盘图标，即可打开菜单。
+
+| 选项 | 用途 |
+| --- | --- |
+| 显示模式 | 选择进度条样式，以及倒计时或重置时间 |
+| 颜色 | 选择 Codex 进度条和文字的颜色 |
+| 显示屏任务栏 | 选择组件所在的显示屏 |
+| 语言 | 切换界面语言，包括简体中文 |
+| 显示额度 | 显示 5 小时额度、每周额度或两者 |
+| 监控服务 | 启用 Codex、Claude Code 或 Antigravity |
+
+拖动组件可调整位置，也可将其移到另一条任务栏。选择副屏前，需在 Windows 设置中开启该显示屏的任务栏。
+
+左键单击托盘图标可显示或隐藏组件。右键菜单还提供刷新频率、低额度提醒、开机自动启动和更新选项。
+
+设置会自动保存在 `%APPDATA%\CodexUsage\settings.json`。本分支与上游程序共用此文件，请每次只运行其中一个版本。
+
+## 常见问题
+
+- **提示未登录（`!`）**：登录对应的 CLI 或应用后，刷新组件。
+- **提示网络错误（`网络` / `NET`）**：检查网络和代理。查询额度时优先使用代理环境变量，其次使用已启用的 Windows 手动代理；暂不支持 PAC 脚本。
+- **无法选择副屏任务栏**：在 Windows 任务栏设置中开启所有显示屏的任务栏，再通过“显示屏任务栏”选择。
+- **无法下载更新**：从本分支的 [Releases](https://github.com/RocktheVegetableMechanics/codex-usage-monitor/releases) 页面下载程序，退出旧版本后替换。
+
+更多说明见[故障排查](docs/troubleshooting.md)。如需反馈问题，请在[本分支的 Issues](https://github.com/RocktheVegetableMechanics/codex-usage-monitor/issues) 中说明 Windows 版本、显示屏缩放比例和复现步骤。请勿附上登录凭据或令牌。
+
+## 构建与贡献
+
+在 Windows 上安装 Rust 和 MSVC C++ 构建工具后，运行：
 
 ```powershell
-codex-usage
+cargo test --locked
+cargo build --release --locked
 ```
 
-启动后，它会出现在任务栏和通知区域的系统托盘中。
+生成的程序位于 `target\release\codex-usage.exe`。欢迎通过 Issue 或 Pull Request 参与改进。提交时请围绕具体问题，并说明验证方法。
 
-- 拖动左侧分隔线可移动任务栏组件
-- 在多显示器环境中，可将组件拖到另一个 Windows 任务栏，从而移动到对应屏幕
-- 右键单击任务栏组件或托盘图标，可设置刷新、监控服务、用量行、配额提醒、更新频率、开机启动、重置位置、语言、软件更新和退出
-- 左键单击托盘图标可显示或隐藏任务栏组件
-- 如需登录 Windows 后自动运行，请在右键菜单中启用“开机启动”
+## 卸载
 
-### 监控服务
+便携版退出程序后删除可执行文件即可。通过脚本安装的版本，可在“Windows 设置 > 应用 > 已安装的应用”中卸载 **Codex Usage**。卸载后会保留设置，便于重新安装。详见[安装说明](docs/installation.md)。
 
-通过右键菜单中的**监控服务**选择组件要显示的独立服务。这些服务不是互斥模型，因此可以同时监控多个账户：
+## 许可与致谢
 
-- **Codex** 默认启用
-- **Claude Code** 在已安装并登录 Claude Code CLI 时，可与 Codex 同时显示或单独显示
-- **Antigravity** 可与其他提供商同时显示，也可作为独立服务列单独显示
+本项目采用 [MIT 许可证](LICENSE)，保留原项目的许可证和版权声明。
 
-显示多个服务时，每个服务都有自己的用量条和对应的文字颜色。Antigravity 会优先使用 Google 的 Gemini 配额摘要，必要时回退到模型配额数据。
-
-Claude 桌面客户端与 Claude Code CLI 使用相互独立的本地登录状态。只登录 Claude 桌面客户端不会启用 Claude Code 监控。检测不到受支持的 Claude Code CLI 凭据时，菜单会以禁用状态显示 **Claude Code（需登录 CLI）**，并自动关闭该服务。
-
-### 系统托盘图标
-
-无论启用了多少服务，应用始终只显示一个托盘图标，并使用与可执行文件及桌面快捷方式相同的内嵌图标。
-
-将鼠标悬停在托盘图标上，会显示所有已启用服务的紧凑用量摘要。左键单击可显示或隐藏任务栏组件，右键单击可打开设置菜单。
-
-### 用量显示与提醒
-
-在右键菜单的**用量显示**中，可同时显示两个配额周期，也可只显示其中一个。应用始终会保留至少一行。
-
-在**配额提醒**中，可选择剩余配额为 10%、20% 或 30% 时提醒。提醒默认关闭。每个提供商的每个配额窗口只会提醒一次，直到重置时间发生变化；即使应用重启，也不会重复提醒。
-
-简体中文界面的紧凑任务栏行使用 `5h` / `7d`、一条连续进度条、剩余百分比，以及 `18:30重置` 或 `07/17重置` 这样的具体本地重置时间。
-
-## 诊断
-
-如需排查启动或显示问题，请运行：
-
-```powershell
-codex-usage --diagnose
-```
-
-日志将写入：
-
-```text
-%TEMP%\codex-usage.log
-```
-
-日志会记录应用版本、安装渠道、可执行文件路径、轮询失败类别和重试时间，但不会记录访问令牌或凭据内容。有关任务栏错误标签及恢复步骤，请参阅[故障排除](docs/troubleshooting.md)。
-
-设置保存在：
-
-```text
-%APPDATA%\CodexUsage\settings.json
-```
-
-## 账户支持
-
-Codex 用量来自本地 Codex 安装中已登录的账户。可选的 Claude Code 监控功能支持 Claude Code 本身所支持的账户类型。
-
-截至 **2026 年 3 月 19 日**，Anthropic 的 Claude Code 设置文档说明：
-
-- **支持：** Pro、Max、Teams、Enterprise 和 Console 账户
-- **不支持：** 免费 Claude.ai 方案
-
-如果 Anthropic 以后调整 Claude Code 的可用范围，只要用量数据仍通过相同的身份验证端点提供，本应用会跟随 Claude Code 的支持范围。
-
-## 隐私与安全
-
-本项目是**开源软件**，你可以直接检查它的具体行为。
-
-应用读取的内容：
-
-- `~/.claude/.credentials.json` 中的本地 Claude Code OAuth 凭据
-- 如果设置了 `CLAUDE_CONFIG_DIR`，读取该目录中的 Claude Code 凭据文件
-- 必要时，已安装 WSL 发行版中的同一凭据文件
-- 启用 Codex 时，读取 `$CODEX_HOME/auth.json` 或 `~/.codex/auth.json` 中的本地 Codex 凭据
-- 启用 Antigravity 时，读取 Windows 凭据管理器中目标为 `gemini:antigravity` 的本地 OAuth 令牌
-
-应用通过网络发送的请求：
-
-- 请求 Anthropic 的 Claude 端点，以读取用量和速率限制信息
-- 启用 Codex 时，请求 ChatGPT 的 Codex 用量端点，以读取 Codex 用量和速率限制信息
-- 启用 Antigravity 时，请求 Google Cloud Code / Antigravity 端点，以读取 Antigravity 配额信息
-- 仅在使用软件更新检查或自更新功能时请求 GitHub
-- 如果设置了 `HTTPS_PROXY`、`HTTP_PROXY` 或 `ALL_PROXY` 等代理环境变量，上述出站请求可能通过代理发送
-
-应用在本地保存的内容：
-
-- 组件位置
-- 选中的任务栏或屏幕
-- 组件显示状态
-- 轮询频率
-- 语言偏好
-- 上次更新检查时间
-- 可见的配额行和低配额提醒阈值
-- 用于避免重复提醒的配额窗口通知键
-- 显示模型偏好
-
-应用**不会**执行的操作：
-
-- 不会将凭据发送到其他服务器
-- 不使用独立的后端服务
-- 不收集分析数据或遥测信息
-- 不上传项目文件
-- 不直接修改 Codex 凭据文件
-- 不读取或复用 Claude 桌面客户端的认证数据
-
-注意：
-
-- 如果 Claude Code 令牌过期，应用可能会在后台调用本地 Claude CLI 进行刷新
-- 如果 Codex 令牌过期，应用可能会在后台调用本地 Codex CLI 进行刷新。监控器本身不会写入 `auth.json`，任何凭据更新都由 Codex CLI 完成
-- 如果 Antigravity 令牌过期，请打开 Antigravity 并重新登录。监控器不会写入 Windows 凭据管理器
-- 便携版可以从本仓库下载最新版本进行自更新
-- 代理必须可信，因为代理转发的用量请求会在 TLS 连接内包含 OAuth Bearer 令牌
-
-## 工作原理
-
-监控器会：
-
-1. 查找已启用模型的登录凭据
-2. 从 Anthropic、ChatGPT 和/或 Google Antigravity 端点读取当前用量
-3. 将结果直接显示在 Windows 任务栏中
-4. 保持组件与所选任务栏及托盘区域对齐
-5. 在后台定期刷新
-
-如果较新的用量端点不可用，应用可以回退为读取 Claude Messages API 返回的速率限制响应头。
-
-## 开源说明
-
-本项目采用 MIT License。原始 [LICENSE](LICENSE) 及版权声明均予以保留。
-
-Codex Usage 是 [CodeZeno/Claude-Code-Usage-Monitor](https://github.com/CodeZeno/Claude-Code-Usage-Monitor) 的持续维护衍生版本。感谢 Craig Constable 和上游贡献者创建原始项目。本仓库中的修改与上游维护者或 OpenAI 不存在隶属或背书关系。
-
-如果你想检查程序行为或审核代码，仓库中提供了全部源码。
+本项目基于 [upstream-ray/codex-usage-monitor](https://github.com/upstream-ray/codex-usage-monitor)，后者源自 [CodeZeno/Claude-Code-Usage-Monitor](https://github.com/CodeZeno/Claude-Code-Usage-Monitor)。感谢 Craig Constable、upstream-ray 及两个项目的贡献者。

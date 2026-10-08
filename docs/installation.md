@@ -26,6 +26,8 @@ The installer is per-user and does not request elevation. It verifies the releas
 
 ## WinGet
 
-The WinGet package uses the release EXE as a portable installer with package identifier `Ray.CodexUsage`. WinGet owns its installation directory and upgrade/uninstall lifecycle. The in-app updater detects WinGet-managed paths and delegates upgrades back to WinGet.
+The upstream project's WinGet package has the identifier `Ray.CodexUsage`. This fork is distributed through its own GitHub Releases and is not published to WinGet. Use this fork's portable executable or PowerShell installer to retain its display and multi-monitor changes.
+
+Existing WinGet-managed installations belong to the upstream project. WinGet owns their installation directory and upgrade/uninstall lifecycle, and the in-app updater delegates those upgrades back to WinGet.
 
 The PowerShell installer is not used as a WinGet installer because the public WinGet community repository does not accept script-based installers.

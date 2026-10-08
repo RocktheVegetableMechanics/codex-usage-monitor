@@ -35,7 +35,9 @@ The log does not include access tokens, refresh tokens, credential file contents
 
 Direct installations and portable copies download only the exact `codex-usage.exe` asset and verify it against `codex-usage.exe.sha256` from the same GitHub Release. The updater keeps the previous EXE until the downloaded version has been installed and restarted successfully. If restart fails, the old EXE is restored.
 
-WinGet-managed installations delegate upgrades to WinGet:
+This fork's portable and direct installations check releases from `RocktheVegetableMechanics/codex-usage-monitor`. If an update fails to download, get the executable from this fork's Releases page and replace it after exiting the app.
+
+WinGet-managed installations use the upstream package. The following command updates the upstream version, not this fork:
 
 ```powershell
 winget upgrade --id Ray.CodexUsage --exact
