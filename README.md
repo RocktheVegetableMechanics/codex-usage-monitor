@@ -16,7 +16,7 @@ This fork is based on [upstream-ray/codex-usage-monitor](https://github.com/upst
 - Remaining quota for the 5-hour and weekly windows. Both the bar and percentage decrease from 100% to 0% as you use the service.
 - Four display modes: segmented or continuous bars, each with a countdown or reset time.
 - Default, orange, blue, and green colors for Codex.
-- A taskbar display selector that remembers your chosen monitor, with support for different scaling settings across monitors.
+- A taskbar display selector that remembers your chosen monitor and restores placement after taskbar changes, with support for different scaling settings across monitors.
 - Simplified Chinese and the upstream language options.
 - Optional Claude Code and Google Antigravity monitoring, low-quota alerts, and separate controls for each quota row.
 - Windows system proxy support for usage requests when no proxy environment variable is set.

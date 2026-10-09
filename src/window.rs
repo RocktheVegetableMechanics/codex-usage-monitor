@@ -245,6 +245,7 @@ impl DisplayMode {
 
 const WM_DPICHANGED_MSG: u32 = 0x02E0;
 const WM_APP_UPDATE_CHECK_COMPLETE: u32 = WM_APP + 2;
+const WM_APP_TASKBAR_RECOVERY: u32 = WM_APP + 4;
 const TRAY_ICON_UPDATE_REPOSITION_SUPPRESS_MS: u64 = 750;
 
 /// How often the watchdog thread polls for an explorer.exe restart (which
@@ -339,27 +340,35 @@ fn relaunch_self() {
 ///
 /// Once explorer destroys the taskbar, our embedded child window is destroyed
 /// and the UI message loop is dead, so recovery cannot happen in-process. This
-/// dedicated thread (independent of the dead message loop) polls the taskbar
-/// handle and, when it changes, relaunches the widget as a fresh process.
+/// dedicated thread relaunches a destroyed widget, or asks the UI thread to
+/// restore a live widget to the selected display when its attachment changes.
 fn spawn_taskbar_watchdog() {
     std::thread::spawn(move || loop {
         std::thread::sleep(Duration::from_secs(TASKBAR_WATCH_INTERVAL_SECS));
         let stored = {
             let state = lock_state();
-            state.as_ref().and_then(|s| s.taskbar_hwnd)
+            state.as_ref().map(|s| (
+                s.hwnd.to_hwnd(), s.taskbar_hwnd, s.taskbar_index, s.taskbar_device.clone(),
+            ))
         };
-        // Only relevant once we have embedded into a taskbar at least once.
-        let Some(old) = stored else {
+        let Some((hwnd, current, index, preferred_device)) = stored else {
             continue;
         };
         let taskbars = native_interop::find_taskbars();
-        if !taskbars.is_empty() && !taskbars.iter().any(|taskbar| taskbar.hwnd == old) {
-            let new = taskbars[0].hwnd;
-            diagnose::log(format!(
-                "watchdog: taskbar changed old={:?} new={:?} -> relaunching",
-                old.0, new.0
-            ));
+        if taskbars.is_empty() {
+            continue;
+        }
+        if !unsafe { IsWindow(hwnd) }.as_bool() {
+            diagnose::log("watchdog: embedded window destroyed -> relaunching");
             relaunch_self();
+            continue;
+        }
+        if let Some(index) = recovery_taskbar_index(&taskbars, current, index, preferred_device.as_deref()) {
+            if taskbar_attachment_changed(hwnd, current, taskbars[index].hwnd) {
+                // Reparent on the UI thread, and re-check there in case the user
+                // selected another display while this snapshot was being taken.
+                unsafe { let _ = PostMessageW(hwnd, WM_APP_TASKBAR_RECOVERY, WPARAM(0), LPARAM(0)); }
+            }
         }
     });
 }
@@ -881,19 +890,57 @@ fn toggle_widget_visibility(hwnd: HWND) {
     }
 }
 
-fn attach_to_taskbar(hwnd: HWND, requested_index: usize, preferred_device: Option<&str>) -> bool {
-    let taskbars = native_interop::find_taskbars();
+fn recovery_taskbar_index(
+    taskbars: &[native_interop::TaskbarWindow],
+    current: Option<HWND>,
+    requested_index: usize,
+    preferred_device: Option<&str>,
+) -> Option<usize> {
     if taskbars.is_empty() {
-        diagnose::log("taskbar not found; using fallback popup window");
-        return false;
+        return None;
     }
-
-    // Keep the same display even when its position in the desktop layout changes.
-    let index = preferred_device
+    preferred_device
         .and_then(|device| taskbars.iter().position(|taskbar| {
             native_interop::monitor_device(taskbar.hwnd).as_deref() == Some(device)
         }))
-        .unwrap_or_else(|| requested_index.min(taskbars.len().saturating_sub(1)));
+        .or_else(|| taskbars.iter().position(|taskbar| Some(taskbar.hwnd) == current))
+        .or(Some(requested_index.min(taskbars.len() - 1)))
+}
+
+fn taskbar_attachment_changed(hwnd: HWND, current: Option<HWND>, target: HWND) -> bool {
+    current != Some(target) || unsafe { GetParent(hwnd).ok() } != Some(target)
+}
+
+fn recover_taskbar_attachment() {
+    let (hwnd, current, index, preferred_device) = {
+        let state = lock_state();
+        let Some(s) = state.as_ref() else { return; };
+        if s.dragging { return; }
+        (s.hwnd.to_hwnd(), s.taskbar_hwnd, s.taskbar_index, s.taskbar_device.clone())
+    };
+    let taskbars = native_interop::find_taskbars();
+    let Some(index) = recovery_taskbar_index(&taskbars, current, index, preferred_device.as_deref()) else {
+        return;
+    };
+    if taskbar_attachment_changed(hwnd, current, taskbars[index].hwnd) {
+        diagnose::log(format!(
+            "recovering taskbar attachment: current={current:?} target={:?} preferred={preferred_device:?}",
+            taskbars[index].hwnd,
+        ));
+        if attach_to_taskbar(hwnd, index, preferred_device.as_deref()) {
+            position_at_taskbar();
+            render_layered();
+            sync_tray_icons(hwnd);
+        }
+    }
+}
+
+fn attach_to_taskbar(hwnd: HWND, requested_index: usize, preferred_device: Option<&str>) -> bool {
+    let taskbars = native_interop::find_taskbars();
+    let Some(index) = recovery_taskbar_index(&taskbars, None, requested_index, preferred_device) else {
+        diagnose::log("taskbar not found; using fallback popup window");
+        return false;
+    };
     let taskbar = taskbars[index];
     diagnose::log(format!(
         "taskbar selected index={index} count={} hwnd={:?} rect=({}, {}, {}, {})",
@@ -939,7 +986,9 @@ fn attach_to_taskbar(hwnd: HWND, requested_index: usize, preferred_device: Optio
         s.tray_notify_hwnd = tray_notify;
         s.win_event_hook = hook;
         s.taskbar_index = index;
-        s.taskbar_device = native_interop::monitor_device(taskbar.hwnd);
+        // A temporary fallback must not replace the user's selected display.
+        s.taskbar_device = preferred_device.map(str::to_owned)
+            .or_else(|| native_interop::monitor_device(taskbar.hwnd));
         s.embedded = true;
     }
     drop(state);
@@ -2878,6 +2927,10 @@ unsafe extern "system" fn wnd_proc(
             LRESULT(0)
         }
         WM_ERASEBKGND => LRESULT(1),
+        WM_APP_TASKBAR_RECOVERY => {
+            recover_taskbar_attachment();
+            LRESULT(0)
+        }
         WM_DISPLAYCHANGE | WM_DPICHANGED_MSG | WM_DPICHANGED_AFTERPARENT | WM_SETTINGCHANGE => {
             if msg == WM_DPICHANGED_MSG {
                 let new_dpi = (wparam.0 & 0xFFFF) as u32;
@@ -4317,6 +4370,44 @@ fn draw_rounded_rect(hdc: HDC, rect: &RECT, color: &Color, radius: i32) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn taskbar_recovery_detects_parent_drift_and_preserves_a_temporary_fallback() {
+        unsafe {
+            let class = native_interop::wide_str("STATIC");
+            let create = |parent: HWND| CreateWindowExW(
+                WINDOW_EX_STYLE(0), PCWSTR::from_raw(class.as_ptr()), PCWSTR::null(),
+                if parent == HWND::default() { WS_POPUP } else { WS_CHILD },
+                0, 0, 10, 10, parent, HMENU::default(), HINSTANCE::default(), None,
+            ).unwrap();
+            let original = create(HWND::default());
+            let other = create(HWND::default());
+            let child = create(original);
+            let unchanged = taskbar_attachment_changed(child, Some(original), original);
+            let _ = SetParent(child, other);
+            let drifted = taskbar_attachment_changed(child, Some(original), original);
+            let original_still_exists = IsWindow(original).as_bool();
+            let preferred_changed = taskbar_attachment_changed(child, Some(other), original);
+            let taskbars = [other, original].map(|hwnd| native_interop::TaskbarWindow {
+                hwnd, rect: RECT::default(),
+            });
+            let fallback = recovery_taskbar_index(
+                &taskbars, Some(original), 0, Some(r"\\.\DISPLAY_NOT_CONNECTED"),
+            );
+            let _ = SetParent(child, original);
+            let restored = taskbar_attachment_changed(child, Some(original), original);
+            let _ = DestroyWindow(child);
+            let _ = DestroyWindow(original);
+            let _ = DestroyWindow(other);
+
+            assert!(!unchanged);
+            assert!(original_still_exists && drifted);
+            assert!(preferred_changed);
+            assert_eq!(fallback, Some(1));
+            assert_eq!(recovery_taskbar_index(&[], None, 0, None), None);
+            assert!(!restored);
+        }
+    }
 
     #[test]
     fn display_mode_survives_settings_reload_without_changing_language_or_visible_rows() {
